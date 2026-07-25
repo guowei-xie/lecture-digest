@@ -1,0 +1,396 @@
+<!doctype html>
+<!--
+  lecture-digest template — a self-contained, single-file interactive knowledge recap.
+
+  HOW TO USE THIS FILE
+  - Everything is inline (CSS + JS). Keep it that way so the output is one shareable .html.
+  - Replace the __PLACEHOLDER__ text and clone the marked blocks. The blocks between
+    <!-- MODULE:START --> and <!-- MODULE:END --> are one knowledge module; duplicate
+    them per module. Same for quiz items inside a module.
+  - The sample module below is a WORKED EXAMPLE showing every component (key points,
+    callout, quote, table, timeline, MCQ quiz, reflection question). Delete components
+    a given module doesn't need — not every module needs a table or a timeline.
+  - The JS at the bottom auto-wires quizzes, the sidebar, scroll-spy, and progress.
+    You should not need to touch it; just follow the data-* attribute patterns.
+  - Set the accent color once in :root (--accent). Pick something that fits the topic.
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__DECK_TITLE__ · 知识复盘</title>
+<style>
+  :root {
+    --accent: #4f46e5;          /* one knob: the theme color. Change to fit the topic. */
+    --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+    --bg: #f7f8fa; --surface: #ffffff; --surface-2: #f2f3f7;
+    --text: #1a1d24; --muted: #626878; --border: #e6e8ee;
+    --ok: #16a34a; --bad: #dc2626; --ok-soft: #16a34a1a; --bad-soft: #dc26261a;
+    --radius: 14px; --maxw: 900px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1015; --surface: #171a21; --surface-2: #1e222b;
+      --text: #e8eaf0; --muted: #9aa1b2; --border: #262b36;
+      --ok-soft: #16a34a26; --bad-soft: #dc262626;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+
+  /* ---- layout: sticky sidebar + content column ---- */
+  .wrap { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 0; }
+  .sidebar {
+    position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+    padding: 28px 20px; border-right: 1px solid var(--border); background: var(--surface);
+  }
+  .sidebar .brand { font-size: 13px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 14px; }
+  .toc a {
+    display: block; padding: 7px 12px; margin: 2px 0; border-radius: 9px;
+    color: var(--muted); text-decoration: none; font-size: 14.5px; line-height: 1.4;
+    border-left: 2px solid transparent; transition: .15s;
+  }
+  .toc a:hover { background: var(--surface-2); color: var(--text); }
+  .toc a.active { color: var(--accent); background: var(--accent-soft); border-left-color: var(--accent); font-weight: 600; }
+  .progress-box { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+  .bar { height: 7px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+
+  main { padding: 0 34px 120px; }
+  .content { max-width: var(--maxw); margin: 0 auto; }
+
+  /* ---- hero ---- */
+  .hero { padding: 56px 0 30px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  .hero .kicker { color: var(--accent); font-weight: 600; font-size: 14px; letter-spacing: .03em; }
+  .hero h1 { font-size: 34px; line-height: 1.25; margin: 10px 0 14px; letter-spacing: -.01em; }
+  .hero .meta { color: var(--muted); font-size: 14.5px; }
+  .hero .tldr {
+    margin-top: 22px; padding: 18px 20px; background: var(--accent-soft);
+    border-radius: var(--radius); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  .hero .tldr b { color: var(--accent); }
+
+  /* ---- modules ---- */
+  section.module { padding: 40px 0; border-bottom: 1px solid var(--border); scroll-margin-top: 20px; }
+  section.module > h2 {
+    font-size: 24px; margin: 0 0 6px; letter-spacing: -.01em;
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  section.module > h2 .idx {
+    font-size: 14px; color: var(--accent); font-weight: 700; background: var(--accent-soft);
+    padding: 3px 10px; border-radius: 99px; white-space: nowrap;
+  }
+  .subtitle { color: var(--muted); margin: 0 0 18px; font-size: 15px; }
+  h3 { font-size: 17px; margin: 26px 0 10px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin: 14px 0; }
+  ul.points { list-style: none; padding: 0; margin: 12px 0; }
+  ul.points > li { position: relative; padding: 6px 0 6px 26px; }
+  ul.points > li::before { content: "▸"; position: absolute; left: 4px; color: var(--accent); font-weight: 700; }
+  ul.points b { color: var(--text); }
+
+  .callout {
+    display: flex; gap: 12px; padding: 14px 16px; border-radius: 12px; margin: 14px 0;
+    background: var(--surface-2); border-left: 3px solid var(--accent);
+  }
+  .callout .ico { font-size: 20px; line-height: 1.4; }
+  .callout.warn { border-left-color: #f59e0b; }
+  /* "启发" — an in-module spark connecting this point to the user's own context (Step 5A). */
+  .callout.spark {
+    border-left-color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+  .callout.spark b { color: var(--accent); }
+
+  blockquote {
+    margin: 16px 0; padding: 14px 20px; border-left: 3px solid var(--accent);
+    background: var(--accent-soft); border-radius: 0 12px 12px 0; font-size: 15.5px;
+  }
+  blockquote cite { display: block; margin-top: 8px; color: var(--muted); font-style: normal; font-size: 13.5px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14.5px; }
+  .table-scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .03em; }
+  tr:hover td { background: var(--surface-2); }
+
+  /* timeline */
+  .timeline { list-style: none; padding: 0; margin: 16px 0; }
+  .timeline li { position: relative; padding: 0 0 18px 26px; border-left: 2px solid var(--border); }
+  .timeline li::before { content: ""; position: absolute; left: -6px; top: 4px; width: 10px; height: 10px; border-radius: 99px; background: var(--accent); }
+  .timeline .t { font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 600; font-size: 13.5px; }
+
+  /* ---- quiz ---- */
+  .quiz { margin: 22px 0 4px; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .quiz-head { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+  .quiz-head .pill { font-size: 12px; color: var(--accent); background: var(--accent-soft); padding: 3px 10px; border-radius: 99px; font-weight: 600; }
+  .q { margin: 18px 0; }
+  .q:first-of-type { margin-top: 10px; }
+  .q .stem { font-weight: 600; margin-bottom: 10px; }
+  .opt {
+    display: block; width: 100%; text-align: left; cursor: pointer; margin: 7px 0;
+    padding: 11px 14px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface-2); color: var(--text); font: inherit; font-size: 14.5px; transition: .12s;
+  }
+  .opt:hover:not(:disabled) { border-color: var(--accent); }
+  .opt:disabled { cursor: default; }
+  .opt.correct { background: var(--ok-soft); border-color: var(--ok); }
+  .opt.wrong { background: var(--bad-soft); border-color: var(--bad); }
+  .opt .mark { float: right; font-weight: 700; }
+  .opt.correct .mark { color: var(--ok); }
+  .opt.wrong .mark { color: var(--bad); }
+  .explain { display: none; margin-top: 10px; padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); font-size: 14.5px; }
+  .explain.show { display: block; }
+  .explain b { color: var(--accent); }
+
+  /* reflection (open question) */
+  .reflect summary {
+    cursor: pointer; list-style: none; padding: 11px 14px; border-radius: 10px;
+    background: var(--surface-2); border: 1px dashed var(--border); font-weight: 600; font-size: 14.5px;
+  }
+  .reflect summary::-webkit-details-marker { display: none; }
+  .reflect summary::before { content: "💭 "; }
+  .reflect[open] summary { border-style: solid; border-color: var(--accent); }
+  .reflect .answer { padding: 12px 14px 2px; font-size: 14.5px; color: var(--text); }
+  .reflect .answer .label { color: var(--accent); font-weight: 700; font-size: 13px; }
+
+  /* ---- "为你定制" personalized methodology block (only when user shares their context) ---- */
+  .foryou {
+    margin: 44px 0 8px; padding: 26px 26px 8px; border-radius: 18px;
+    background: linear-gradient(135deg, var(--accent-soft), transparent);
+    border: 1.5px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .foryou > h2 { font-size: 22px; margin: 0 0 4px; }
+  .foryou .badge { font-size: 12px; color: #fff; background: var(--accent); padding: 3px 10px; border-radius: 99px; font-weight: 600; margin-right: 8px; }
+  .foryou .pain { font-style: italic; color: var(--muted); border-left: 3px solid var(--accent); padding-left: 12px; margin: 12px 0; }
+  .steps { counter-reset: s; list-style: none; padding: 0; margin: 14px 0; }
+  .steps > li { counter-increment: s; position: relative; padding: 4px 0 14px 40px; }
+  .steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: 2px; width: 26px; height: 26px;
+    background: var(--accent); color: #fff; border-radius: 99px; display: grid; place-items: center;
+    font-weight: 700; font-size: 13px;
+  }
+  .action { display: flex; gap: 12px; padding: 12px 14px; margin: 8px 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  .action .prio { flex: none; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px; height: fit-content; }
+  .action .prio.now { background: var(--bad-soft); color: var(--bad); }
+  .action .prio.next { background: var(--ok-soft); color: var(--ok); }
+  .action .body small { color: var(--muted); }
+
+  .foot { max-width: var(--maxw); margin: 40px auto 0; color: var(--muted); font-size: 13.5px; text-align: center; }
+
+  @media (max-width: 760px) {
+    .wrap { grid-template-columns: 1fr; }
+    .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+    main { padding: 0 18px 80px; }
+    .hero h1 { font-size: 27px; }
+  }
+</style>
+
+<div class="wrap">
+  <!-- ============ SIDEBAR (auto-filled by JS from module headings) ============ -->
+  <aside class="sidebar">
+    <div class="brand">📖 知识复盘</div>
+    <nav class="toc" id="toc"><!-- JS injects links here --></nav>
+    <div class="progress-box">
+      测验进度 <span id="pct">0%</span>
+      <div class="bar"><i id="barfill"></i></div>
+      <div style="margin-top:8px" id="progtext">已作答 0 / 0 题</div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="content">
+      <!-- ============ HERO ============ -->
+      <header class="hero">
+        <div class="kicker">__EVENT_KICKER__</div>   <!-- e.g. 首届飞书 AI 绝活大会 · 杭州场 -->
+        <h1>__DECK_TITLE__</h1>                        <!-- e.g. 6 小时现场，8 位嘉宾，一份能落地的 AI 原生工作手册 -->
+        <div class="meta">__META_LINE__</div>          <!-- e.g. 数据来源：官方妙记回放 · 复盘时间：2026-07-25 · 共 6 个模块 -->
+        <div class="tldr">
+          <b>一分钟看完：</b>__TLDR__   <!-- 2-3 句抓住全场最重要的判断，结论先行 -->
+        </div>
+      </header>
+
+      <!-- ============ MODULE (clone this whole block per module) ============ -->
+      <!-- MODULE:START -->
+      <section class="module" id="m1" data-title="示例模块">
+        <h2><span class="idx">模块 1</span> __MODULE_TITLE__</h2>
+        <p class="subtitle">__MODULE_SUBTITLE__</p>   <!-- 一句话点出这个模块的核心洞察 -->
+
+        <h3>核心观点</h3>
+        <ul class="points">
+          <li><b>__POINT_TITLE__</b>：__POINT_DETAIL__</li>
+          <li><b>__POINT_TITLE__</b>：__POINT_DETAIL__</li>
+        </ul>
+
+        <div class="callout">
+          <div class="ico">💡</div>
+          <div><b>落地案例：</b>__EXAMPLE__</div>
+        </div>
+
+        <!-- Optional "启发" spark — ONLY when the user shared their context and THIS point connects to it.
+             Weave it right where the relevant knowledge is (Step 5A), don't save it all for the end. Delete if N/A. -->
+        <div class="callout spark">
+          <div class="ico">💡</div>
+          <div><b>给你的启发：</b>__CONNECT_TO_USER_CONTEXT__（这点和你说的 X 有关 —— 你可以这样用 / 不妨想想……）</div>
+        </div>
+
+        <blockquote>
+          "__QUOTE__"
+          <cite>—— __SPEAKER__</cite>
+        </blockquote>
+
+        <!-- Optional: a table. Delete if not needed. -->
+        <div class="table-scroll">
+        <table>
+          <thead><tr><th>__COL__</th><th>__COL__</th><th>__COL__</th></tr></thead>
+          <tbody>
+            <tr><td>__CELL__</td><td>__CELL__</td><td>__CELL__</td></tr>
+          </tbody>
+        </table>
+        </div>
+
+        <!-- Optional: a timeline. Delete if not needed. -->
+        <ul class="timeline">
+          <li><span class="t">__TIME__</span> — __EVENT__</li>
+          <li><span class="t">__TIME__</span> — __EVENT__</li>
+        </ul>
+
+        <!-- ---- QUIZ for this module ---- -->
+        <div class="quiz">
+          <div class="quiz-head"><span class="pill">检验一下</span> 你抓住这个模块了吗？</div>
+
+          <!-- MCQ: mark the correct option with data-correct. Give every question a data-explain. -->
+          <div class="q" data-explain="正确答案解析：说清楚为什么对、其它选项错在哪，别只写“选 B”。">
+            <div class="stem">1. __QUESTION_STEM__</div>
+            <button class="opt">__OPTION_A__</button>
+            <button class="opt" data-correct>__OPTION_B（正确）__</button>
+            <button class="opt">__OPTION_C__</button>
+            <button class="opt">__OPTION_D__</button>
+          </div>
+
+          <div class="q" data-explain="解析……">
+            <div class="stem">2. __QUESTION_STEM__</div>
+            <button class="opt" data-correct>__OPTION_A（正确）__</button>
+            <button class="opt">__OPTION_B__</button>
+            <button class="opt">__OPTION_C__</button>
+          </div>
+
+          <!-- Reflection: open-ended, no single answer. Provide a 参考思路 that provokes thinking. -->
+          <details class="reflect">
+            <summary>__OPEN_REFLECTION_QUESTION__</summary>
+            <div class="answer"><span class="label">参考思路：</span>__MODEL_ANSWER__</div>
+          </details>
+        </div>
+      </section>
+      <!-- MODULE:END -->
+
+      <!-- ============ 为你定制 (ONLY include when the user shared their pain point / context) ============ -->
+      <!-- Delete this whole block if the user didn't provide personal context. Give it an id so it -->
+      <!-- shows up in the sidebar too (add a data-title). -->
+      <section class="module foryou" id="foryou" data-title="⭐ 为你定制">
+        <h2><span class="badge">为你定制</span> __PERSONALIZED_TITLE__</h2>
+        <p class="pain">你的处境：__RESTATE_USER_PAIN__</p>   <!-- 复述你理解到的用户痛点/场景 -->
+
+        <h3>这场讲座里，能解你这个问题的是——</h3>
+        <ul class="points">
+          <li><b>__KNOWLEDGE_POINT__</b>：为什么能解你这个问题 —— __WHY_IT_FITS__</li>
+        </ul>
+
+        <h3>给你的方法论（照着做）</h3>
+        <ol class="steps">
+          <li>__STEP__</li>
+          <li>__STEP__</li>
+        </ol>
+
+        <h3>可执行行动建议</h3>
+        <div class="action">
+          <span class="prio now">本周先做</span>
+          <div class="body">__ACTION__ <br><small>预期效果：__IMPACT__ ｜ 怎么验证：__VERIFY__</small></div>
+        </div>
+        <div class="action">
+          <span class="prio next">后续再做</span>
+          <div class="body">__ACTION__ <br><small>预期效果：__IMPACT__ ｜ 怎么验证：__VERIFY__</small></div>
+        </div>
+
+        <div class="callout warn">
+          <div class="ico">⚠️</div>
+          <div><b>边界：</b>__WHAT_LECTURE_DIDNT_COVER__（讲座未覆盖 / 需你补充信息才能定的部分，如实说明）</div>
+        </div>
+      </section>
+
+      <div class="foot">__FOOTER__ · 由 lecture-digest 生成</div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  // ---- Build the sidebar TOC from module headings, wire scroll-spy ----
+  const toc = document.getElementById('toc');
+  const mods = [...document.querySelectorAll('section.module')];
+  mods.forEach(m => {
+    const t = m.dataset.title || m.querySelector('h2').textContent.trim();
+    const a = document.createElement('a');
+    a.href = '#' + m.id; a.textContent = t; a.dataset.for = m.id;
+    toc.appendChild(a);
+  });
+  const links = [...toc.querySelectorAll('a')];
+  const spy = new IntersectionObserver(es => {
+    es.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.toggle('active', l.dataset.for === e.target.id));
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  mods.forEach(m => spy.observe(m));
+
+  // ---- Wire MCQ questions: click reveals correctness + explanation ----
+  const allQ = [...document.querySelectorAll('.q')];
+  let answered = 0;
+  const total = allQ.length;
+  function updateProgress() {
+    const pct = total ? Math.round(answered / total * 100) : 0;
+    document.getElementById('pct').textContent = pct + '%';
+    document.getElementById('barfill').style.width = pct + '%';
+    document.getElementById('progtext').textContent = `已作答 ${answered} / ${total} 题`;
+  }
+  updateProgress();
+
+  allQ.forEach(q => {
+    const opts = [...q.querySelectorAll('.opt')];
+    let done = false;
+    opts.forEach(opt => {
+      opt.addEventListener('click', () => {
+        if (done) return;
+        done = true; answered++;
+        const correct = opt.hasAttribute('data-correct');
+        opts.forEach(o => {
+          o.disabled = true;
+          if (o.hasAttribute('data-correct')) {
+            o.classList.add('correct');
+            o.insertAdjacentHTML('beforeend', '<span class="mark">✓</span>');
+          }
+        });
+        if (!correct) {
+          opt.classList.add('wrong');
+          opt.insertAdjacentHTML('beforeend', '<span class="mark">✗</span>');
+        }
+        const ex = q.dataset.explain;
+        if (ex) {
+          const d = document.createElement('div');
+          d.className = 'explain show';
+          d.innerHTML = '<b>解析：</b>' + ex;
+          q.appendChild(d);
+        }
+        updateProgress();
+      });
+    });
+  });
+})();
+</script>
